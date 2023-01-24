@@ -16,14 +16,36 @@ admin.initializeApp({
 const app = express();
 app.use(express.json());
 
-//EndPoints
+//we add an express midddleware to load the user information
+app.use(async (req,res, next) =>{
+    const { authtoken } = req.headers;
+    console.log("[middleware] authtoken:",authtoken);
 
+    if(authtoken){
+        try {
+            const user = await admin.auth().verifyIdToken(authtoken);
+            console.log("[middleware] user:",user);
+            req.user = user;
+            
+        } catch (e) {
+            res.sendStatus(400);
+        }
+    }
+
+    next();
+})
+
+
+//EndPoints
 app.get('/api/articles/:name', async (req,res)=>{
     const { name } = req.params;
-
+    const { uid } = req.user;
     const article = await db.collection('articles').findOne({name});
 
     if(article){
+        const upvoteIds = article.upvoteIds || [];
+        //Indica si pueden votar o no
+        article.canUpvote = uid && !upvoteIds.include(uid);
         res.json(article);
     }else{
         res.sendStatus(404)
