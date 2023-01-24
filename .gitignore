@@ -4,6 +4,7 @@
 /node_modules
 /backend/node_modules
 /backend/mongo-db-data
+credentials.json
 /.pnp
 .pnp.js
 
