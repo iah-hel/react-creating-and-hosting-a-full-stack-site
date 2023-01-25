@@ -16,9 +16,10 @@ const ArticlePage = () =>{
     const {user,isLoading} = useUser();
 
     useEffect(() => {
-        //we have to create a function to avoid errors with async
         const loadArticleInfo = async () => {
-            const response = await axios.get(`/api/articles/${articleId}`);
+            const token = user && await user.getIdToken();
+            const headers = token ?  { authtoken: token } : {};// to avoid send authtoken equals to null
+            const response = await axios.get(`/api/articles/${articleId}`,headers);
             const newArticleInfo = response.data;
             setArticleInfo(newArticleInfo);
         }
@@ -29,7 +30,9 @@ const ArticlePage = () =>{
     const article = articles.find(article => article.name === articleId);
 
     const addUpvote = async () =>{
-        const response = await axios.put(`/api/articles/${articleId}/upvotes`)
+        const token = user && await user.getIdToken();
+        const headers = token ?  { authtoken: token } : {};// to avoid send authtoken equals to null
+        const response = await axios.put(`/api/articles/${articleId}/upvotes`,null, headers)
         const updatedArticle = response.data;
         setArticleInfo(updatedArticle);
     }

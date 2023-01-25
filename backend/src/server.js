@@ -6,7 +6,7 @@ import {db,connectToDB} from  './db.js'
 import path from 'path';
 
 const credentials = JSON.parse(
-    fs.readFileSync(process.cwd() +"/credentials.json")
+    fs.readFileSync("./credentials.json")
 );
 
 admin.initializeApp({
@@ -21,20 +21,20 @@ app.use(express.json());
 
 app.use(async (req,res, next) =>{
     const { authtoken } = req.headers;
-    console.log("[middleware 1] authtoken:",authtoken);
+    console.log(`[middleware 1] [request]:${req.path} [authtoken]:${authtoken}`);
 
     if(authtoken){
         try {
-            const user = await admin.auth().verifyIdToken(authtoken);
-            console.log("[middleware] user:",user);
-            req.user = user;
-            
+            req.user = await admin.auth().verifyIdToken(authtoken);
+            console.log("[middleware] user:",req.user);           
         } catch (e) {
             console.log("[middleware] Error verificando el token:",e.message);
             //we use return  to avoid [ERR_HTTP_HEADERS_SENT] error
             return res.sendStatus(400);
         }
     }
+
+    req.user = req.user || {};
 
     next();
 })
@@ -50,7 +50,7 @@ app.get('/api/articles/:name', async (req,res)=>{
     if(article){
         const upvoteIds = article.upvoteIds || [];
         //Indica si pueden votar o no
-        article.canUpvote = uid && !upvoteIds.include(uid);
+        article.canUpvote = uid && !upvoteIds.includes(uid);
         res.json(article);
     }else{
         res.sendStatus(404)
@@ -77,7 +77,7 @@ app.put('/api/articles/:name/upvotes',async (req,res)=>{
 
     if(article){
         const upvoteIds = article.upvoteIds || [];
-        const canUpvote = uid && !upvoteIds.include(uid);
+        const canUpvote = uid && !upvoteIds.includes(uid);
 
         if(canUpvote){
             await db.collection('articles').updateOne({name}, {
