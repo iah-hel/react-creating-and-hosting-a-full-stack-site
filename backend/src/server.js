@@ -1,131 +1,118 @@
-import fs from 'fs'
-import admin from 'firebase-admin'
+import fs from 'fs';
+import path from 'path';
+import admin from 'firebase-admin';
 import express from 'express';
-import {db,connectToDB} from  './db.js'
+import 'dotenv/config';
+import { db, connectToDB } from './db.js';
+
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const credentials = JSON.parse(
-    fs.readFileSync("./credentials.json")
+    fs.readFileSync('./credentials.json')
 );
-
 admin.initializeApp({
-    credential:admin.credential.cert(credentials)
+    credential: admin.credential.cert(credentials),
 });
-
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../build')));
 
-//we add an express midddleware to load the user information, this middleware applies only the next component
-app.use(async (req,res, next) =>{
+app.get(/^(?!\/api).+/, (req, res) => {
+    res.sendFile(path.join(__dirname, '../build/index.html'));
+})
+
+app.use(async (req, res, next) => {
     const { authtoken } = req.headers;
-    console.log(`[middleware 1] [url]:${req.path} [authtoken]:${authtoken}`);
 
-    if(authtoken){
+    if (authtoken) {
         try {
-            req.user = await admin.auth().verifyIdToken(authtoken);       
+            req.user = await admin.auth().verifyIdToken(authtoken);
         } catch (e) {
-            console.log("[middleware] Error verificando el token:",e.message);
-            //we use return  to avoid [ERR_HTTP_HEADERS_SENT] error
             return res.sendStatus(400);
         }
     }
 
     req.user = req.user || {};
-    console.log("[middleware 1] [req.user]:",req.user);
 
     next();
-})
+});
 
-
-//EndPoints
-app.get('/api/articles/:name', async (req,res)=>{
+app.get('/api/articles/:name', async (req, res) => {
     const { name } = req.params;
     const { uid } = req.user;
 
-    console.log("[get] [name]:",name);
-    console.log("[get] [uid]:",uid);
-    const article = await db.collection('articles').findOne({name});
-    console.log("[get] [article]:",article);
+    const article = await db.collection('articles').findOne({ name });
 
-    if(article){
+    if (article) {
         const upvoteIds = article.upvoteIds || [];
-        console.log("[get] [upvoteIds]:",upvoteIds);
-        //Indica si pueden votar o no
         article.canUpvote = uid && !upvoteIds.includes(uid);
-        console.log("[get] [articleUpdated]:",article);
         res.json(article);
-    }else{
-        res.sendStatus(404)
+    } else {
+        res.sendStatus(404);
     }
+});
 
-})
-
-//Prevent to make  unautorized requests
-app.use((req, res, next) =>{
-    console.log("[middleware 2] Entrando");
-
-    if(req.user){
+app.use((req, res, next) => {
+    if (req.user) {
         next();
-    }else{
+    } else {
         res.sendStatus(401);
     }
 });
 
-app.put('/api/articles/:name/upvotes',async (req,res)=>{
-    const {name} = req.params;
-    const {uid} = req.user;
+app.put('/api/articles/:name/upvote', async (req, res) => {
+    const { name } = req.params;
+    const { uid } = req.user;
 
-    const article = await db.collection('articles').findOne({name});
+    const article = await db.collection('articles').findOne({ name });
 
-    console.log("[Upvotes] name:",name);
-    console.log("[Upvotes] uid:",uid);
-    console.log("[Upvotes] article:",article);
-
-    if(article){
+    if (article) {
         const upvoteIds = article.upvoteIds || [];
         const canUpvote = uid && !upvoteIds.includes(uid);
-
-        if(canUpvote){
-            await db.collection('articles').updateOne({name}, {
-                    $inc:{ upvotes:1 },
-                    $push:{ upvoteIds:uid }
+   
+        if (canUpvote) {
+            await db.collection('articles').updateOne({ name }, {
+                $inc: { upvotes: 1 },
+                $push: { upvoteIds: uid },
             });
         }
-   
-        const updatedArticle = await db.collection('articles').findOne({name});
-        res.json(updatedArticle)
 
-    }else{
+        const updatedArticle = await db.collection('articles').findOne({ name });
+        res.json(updatedArticle);
+    } else {
         res.send('That article doesn\'t exist');
     }
-})
+});
 
-app.post('/api/articles/:name/comments',async (req,res)=>{
+app.post('/api/articles/:name/comments', async (req, res) => {
     const { name } = req.params;
     const { text } = req.body;
     const { email } = req.user;
+    const { uid } = req.user;
 
-    console.log("[Comments] name:",name);
-    console.log("[Comments] text:",text);
-    console.log("[Comments] email:",email);
+    await db.collection('articles').updateOne({ name }, {
+        $push: { comments: { postedBy: email, text } },
+    });
+    const article = await db.collection('articles').findOne({ name });
 
-    await db.collection('articles').updateOne({name},{
-        $push:{ comments: { postedBy: email, text } },
-    })
+    if (article) {
+        const upvoteIds = article.upvoteIds || [];
+        article.canUpvote = uid && !upvoteIds.includes(uid);
 
-    const article = await db.collection('articles').findOne({name});
-
-    if(article){
         res.json(article);
-    }else{
-        res.send('That article doesn\'t exist');
+    } else {
+        res.send('That article doesn\'t exist!');
     }
+});
 
-})
+const PORT = process.env.PORT || 8000;
 
 connectToDB(() => {
-    console.log("Succesfully connected to database!")
-    app.listen(8000,()=>{
-        console.log('Server is listening on port 8000')
-    })
+    console.log('Successfully connected to database!');
+    app.listen(PORT, () => {
+        console.log('Server is listening on port ' + PORT);
+    });
 })
