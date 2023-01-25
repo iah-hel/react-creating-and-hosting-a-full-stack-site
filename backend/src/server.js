@@ -30,7 +30,9 @@ app.use(async (req,res, next) =>{
             req.user = user;
             
         } catch (e) {
-            res.sendStatus(400);
+            console.log("[middleware] Error verificando el token:",e.message);
+            //we use return  to avoid [ERR_HTTP_HEADERS_SENT] error
+            return res.sendStatus(400);
         }
     }
 
